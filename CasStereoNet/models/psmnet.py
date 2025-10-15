@@ -134,38 +134,37 @@ class feature_extraction(nn.Module):
         output_s1   = self.firstconv_a(x)
         output      = self.firstconv_b(output_s1)
         output_s2   = self.layer1(output)
-        output_raw  = self.layer2(output_s2)
+        output_raw  = self.layer2(output_s2) #[B,64,128,64]
         output      = self.layer3(output_raw)
         output_skip = self.layer4(output)
 
 
         output_branch1 = self.branch1(output_skip)
-        output_branch1 = F.upsample(output_branch1, (output_skip.size()[2],output_skip.size()[3]),mode='bilinear', align_corners=Align_Corners)
+        output_branch1 = F.upsample(output_branch1, (output_skip.size()[2],output_skip.size()[3]),mode='bilinear', align_corners=Align_Corners) #[B,32,128,64]
 
         output_branch2 = self.branch2(output_skip)
-        output_branch2 = F.upsample(output_branch2, (output_skip.size()[2],output_skip.size()[3]),mode='bilinear', align_corners=Align_Corners)
+        output_branch2 = F.upsample(output_branch2, (output_skip.size()[2],output_skip.size()[3]),mode='bilinear', align_corners=Align_Corners) #[B,32,128,64]
 
         output_branch3 = self.branch3(output_skip)
-        output_branch3 = F.upsample(output_branch3, (output_skip.size()[2],output_skip.size()[3]),mode='bilinear', align_corners=Align_Corners)
+        output_branch3 = F.upsample(output_branch3, (output_skip.size()[2],output_skip.size()[3]),mode='bilinear', align_corners=Align_Corners) #[B,32,128,64]
 
         output_branch4 = self.branch4(output_skip)
-        output_branch4 = F.upsample(output_branch4, (output_skip.size()[2],output_skip.size()[3]),mode='bilinear', align_corners=Align_Corners)
+        output_branch4 = F.upsample(output_branch4, (output_skip.size()[2],output_skip.size()[3]),mode='bilinear', align_corners=Align_Corners) #[B,32,128,64]
 
-        output_feature = torch.cat((output_raw, output_skip, output_branch4, output_branch3, output_branch2, output_branch1), 1)
-
+        output_feature = torch.cat((output_raw, output_skip, output_branch4, output_branch3, output_branch2, output_branch1), 1) #[B,320,128,64] 
 
         output_msfeat = {}
 
-        output_feature = self.inner0(output_feature)
+        output_feature = self.inner0(output_feature) #压缩维度
         out = self.lastconv(output_feature)
         output_msfeat["stage1"] = out
 
         intra_feat = output_feature
 
-        if self.arch_mode == "fpn":
+        if self.arch_mode == "fpn": #True
             if self.num_stage == 3:
                 intra_feat = F.interpolate(intra_feat, scale_factor=2, mode="nearest") + self.inner1(output_s2)
-                out = self.out2(intra_feat)
+                out = self.out2(intra_feat) # 用拼接后的代价体压缩后上采样
                 output_msfeat["stage2"] = out
 
                 intra_feat = F.interpolate(intra_feat, scale_factor=2, mode="nearest") + self.inner2(output_s1)
@@ -174,7 +173,7 @@ class feature_extraction(nn.Module):
 
             elif self.num_stage == 2:
                 intra_feat = F.interpolate(intra_feat, scale_factor=2, mode="nearest") + self.inner1(output_s2)
-                out = self.out2(intra_feat)
+                out = self.out2(intra_feat)  # [B,16,256,128]
                 output_msfeat["stage2"] = out
 
         return output_msfeat
@@ -238,17 +237,17 @@ class CostAggregation(nn.Module):
 
         out1 = self.dres2(cost0)
         out2 = self.dres3(out1)
-        out3 = self.dres4(out2)
+        out3 = self.dres4(out2) # out3 是提取特征 [1, 32, 12, 128, 64]
 
-        cost3 = self.classif3(out3)
+        cost3 = self.classif3(out3) # cost3 是分类到视差维度是1 [1,1,12,128,64]
 
         if self.training:
             cost0 = self.classif0(cost0)
             cost1 = self.classif1(out1)
-            cost2 = self.classif2(out2)
+            cost2 = self.classif2(out2) #shape都一样
 
             cost0 = F.upsample(cost0, [FineD, FineH, FineW], mode='trilinear',
-                               align_corners=Align_Corners)
+                               align_corners=Align_Corners) #上采样到[1,1,48,512,256] 主要用于训练
             cost1 = F.upsample(cost1, [FineD, FineH, FineW], mode='trilinear',
                                align_corners=Align_Corners)
             cost2 = F.upsample(cost2, [FineD, FineH, FineW], mode='trilinear',
@@ -256,7 +255,7 @@ class CostAggregation(nn.Module):
 
             cost0 = torch.squeeze(cost0, 1)
             pred0 = F.softmax(cost0, dim=1)
-            pred0 = disparity_regression(pred0, disp_range_samples)
+            pred0 = disparity_regression(pred0, disp_range_samples) # pred0是回归结果
 
             cost1 = torch.squeeze(cost1, 1)
             pred1 = F.softmax(cost1, dim=1)
@@ -275,7 +274,7 @@ class CostAggregation(nn.Module):
         pred3 = disparity_regression(pred3_prob, disp_range_samples)
 
         if self.training:
-            return pred0, pred1, pred2, pred3
+            return pred0, pred1, pred2, pred3 #pred3是最终输出
         else:
             return pred3
 
@@ -287,31 +286,30 @@ class GetCostVolume(nn.Module):
         assert (x.is_contiguous() == True)
 
         bs, channels, height, width = x.size()
-        cost = x.new().resize_(bs, channels * 2, ndisp, height, width).zero_()
-        # cost = y.unsqueeze(2).repeat(1, 2, ndisp, 1, 1) #(B, 2C, D, H, W)
+        cost = x.new().resize_(bs, channels * 2, ndisp, height, width).zero_() #[B, 2C, D, H, W]
 
         mh, mw = torch.meshgrid([torch.arange(0, height, dtype=x.dtype, device=x.device),
-                                 torch.arange(0, width, dtype=x.dtype, device=x.device)])  # (H *W)
+                                 torch.arange(0, width, dtype=x.dtype, device=x.device)])  # mh(H *W)  mw(H *W) 相当于升维的x轴坐标和y轴坐标
         mh = mh.reshape(1, 1, height, width).repeat(bs, ndisp, 1, 1)
         mw = mw.reshape(1, 1, height, width).repeat(bs, ndisp, 1, 1)  # (B, D, H, W)
 
         cur_disp_coords_y = mh
-        cur_disp_coords_x = mw - disp_range_samples
+        cur_disp_coords_x = mw - disp_range_samples #对x轴偏移，相当于减去视差。[1,12,128,64]。在第一个阶段每个视差维度内对x的偏移量是一样的，第二阶段是不一样的但在视差维度内分布是一样的
 
         coords_x = cur_disp_coords_x / ((width - 1.0) / 2.0) - 1.0  # trans to -1 - 1
         coords_y = cur_disp_coords_y / ((height - 1.0) / 2.0) - 1.0
         grid = torch.stack([coords_x, coords_y], dim=4)   #(B, D, H, W, 2)
 
         cost[:, x.size()[1]:, :, :, :] = F.grid_sample(y, grid.view(bs, ndisp * height, width, 2), mode='bilinear',
-                                                       padding_mode='zeros').view(bs, channels, ndisp, height, width)
+                                                       padding_mode='zeros',align_corners=True).view(bs, channels, ndisp, height, width)
+        # grid_sample(input, grid, ...) 根据 grid 提供的采样坐标，从 input 特征图中取出对应位置的值
+
+        #y[1,32,128,64] grid[1,12,128,64,2] viewed_grid [1,1536,64,2] -> [1,32,1536,64] C维度不变，H维度按各个视差级复制，W维度偏移 -> [1,32,12,128,64] 拆开
 
         # a littel difference, no zeros filling
         tmp = x.unsqueeze(2).repeat(1, 1, ndisp, 1, 1) #(B, C, D, H, W)
-        # tmp = tmp.transpose(0, 1) #(C, B, D, H, W)
-        # #x1 = x2 + d >= d
-        # tmp[:, mw < disp_range_samples] = 0
-        # tmp = tmp.transpose(0, 1) #(B, C, D, H, W)
-        cost[:, :x.size()[1], :, :, :] = tmp
+
+        cost[:, :x.size()[1], :, :, :] = tmp  #在C维度拼接
 
         return cost
 
@@ -373,18 +371,18 @@ class PSMNet(nn.Module):
 
     def forward(self, left, right):
 
-        refimg_msfea = self.feature_extraction(left)
+        refimg_msfea = self.feature_extraction(left) #['stage1']:[1,32,128,64] ['stage2']:[1,16,256,128]
         targetimg_msfea = self.feature_extraction(right)
 
         outputs = {}
         pred, cur_disp = None, None
-        for stage_idx in range(self.num_stage):
+        for stage_idx in range(self.num_stage): #2
             # print("*********************stage{}*********************".format(stage_idx + 1))
             if pred is not None:
                 if self.grad_method == "detach":
                     cur_disp = pred.detach()
                 else:
-                    cur_disp = pred
+                    cur_disp = pred #如果有上个阶段的结果，cur_disp记录上个阶段的结果 [1,512,256]
             disp_range_samples = get_disp_range_samples(cur_disp=cur_disp, ndisp=self.ndisps[stage_idx],
                                                         disp_inteval_pixel=self.disp_interval_pixel[stage_idx],
                                                         dtype=left.dtype,
@@ -400,9 +398,8 @@ class PSMNet(nn.Module):
             cost = self.get_cv(refimg_fea, targetimg_fea,
                                disp_range_samples=F.interpolate((disp_range_samples / stage_scale).unsqueeze(1),
                                                                 [self.ndisps[stage_idx]//int(stage_scale), left.size()[2]//int(stage_scale), left.size()[3]//int(stage_scale)],
-                                                                mode='trilinear',
-                                                                align_corners=Align_Corners_Range).squeeze(1),
-                               ndisp=self.ndisps[stage_idx]//int(stage_scale))
+                                                                mode='trilinear',align_corners=Align_Corners_Range).squeeze(1),ndisp=self.ndisps[stage_idx]//int(stage_scale))
+                                #disp_range_samples 是把 disp_range_samples 降采样到 [1,12,128,64]，也就是按照stage_scale 对数值和size都缩小。第二次是[1,24,512,256]
             if self.training:
                 pred0, pred1, pred2, pred3 = self.cost_agg[stage_idx](cost,
                                                                       FineD=self.ndisps[stage_idx],

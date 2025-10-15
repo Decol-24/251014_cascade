@@ -12,33 +12,33 @@ import torchvision.utils as vutils
 import torch.nn.functional as F
 import numpy as np
 import time
-from tensorboardX import SummaryWriter
 from datasets import __datasets__
 from models import __models__, __loss__
 from utils import *
 import gc
+from torch.utils.tensorboard import SummaryWriter
 
 cudnn.benchmark = True
 assert torch.backends.cudnn.enabled, "Amp requires cudnn backend to be enabled."
 
 parser = argparse.ArgumentParser(description='Cascade Stereo Network (CasStereoNet)')
-parser.add_argument('--model', default='gwcnet-c', help='select a model structure', choices=__models__.keys())
+parser.add_argument('--model', default='gwcnet-c', help='select a model structure', choices=__models__.keys()) # gwcnet-c 是 PSMnet
 parser.add_argument('--maxdisp', type=int, default=192, help='maximum disparity')
 
-parser.add_argument('--dataset', required=True, help='dataset name', choices=__datasets__.keys())
-parser.add_argument('--datapath', required=True, help='data path')
-parser.add_argument('--test_dataset', required=True, help='dataset name', choices=__datasets__.keys())
-parser.add_argument('--test_datapath', required=True, help='data path')
-parser.add_argument('--trainlist', required=True, help='training list')
-parser.add_argument('--testlist', required=True, help='testing list')
+parser.add_argument('--dataset', default='sceneflow', help='dataset name', choices=__datasets__.keys())
+parser.add_argument('--datapath', default='/home/liqi/Code/Scene_Flow_Datasets/', help='data path')
+parser.add_argument('--test_dataset', default='sceneflow', help='dataset name', choices=__datasets__.keys())
+parser.add_argument('--test_datapath', default='/home/liqi/Code/Scene_Flow_Datasets/', help='data path')
+parser.add_argument('--trainlist', default='./filenames/sceneflow_train.txt', help='training list')
+parser.add_argument('--testlist', default='./filenames/sceneflow_test.txt', help='testing list')
 
 parser.add_argument('--lr', type=float, default=0.001, help='base learning rate')
 parser.add_argument('--batch_size', type=int, default=1, help='training batch size')
 parser.add_argument('--test_batch_size', type=int, default=1, help='testing batch size')
-parser.add_argument('--epochs', type=int, required=True, help='number of epochs to train')
-parser.add_argument('--lrepochs', type=str, required=True, help='the epochs to decay lr: the downscale rate')
+parser.add_argument('--epochs', type=int, default=16, help='number of epochs to train')
+parser.add_argument('--lrepochs', type=str, default='10,12,14,16:2', help='the epochs to decay lr: the downscale rate')
 
-parser.add_argument('--logdir', required=True, help='the directory to save logs and checkpoints')
+parser.add_argument('--logdir', default='./result', help='the directory to save logs and checkpoints')
 parser.add_argument('--loadckpt', help='load the weights from a specific checkpoint')
 parser.add_argument('--resume', action='store_true', help='continue training the model')
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
@@ -60,16 +60,14 @@ parser.add_argument('--cr_base_chs', type=str, default="32,32,16", help='cost re
 parser.add_argument('--grad_method', type=str, default="detach", choices=["detach", "undetach"], help='predicted disp detach, undetach')
 
 
-parser.add_argument('--using_ns', action='store_true', help='using neighbor search')
+parser.add_argument('--using_ns', default=True, help='using neighbor search')
 parser.add_argument('--ns_size', type=int, default=3, help='nb_size')
 
-parser.add_argument('--crop_height', type=int, required=True, help="crop height")
-parser.add_argument('--crop_width', type=int, required=True, help="crop width")
-parser.add_argument('--test_crop_height', type=int, required=True, help="crop height")
-parser.add_argument('--test_crop_width', type=int, required=True, help="crop width")
+parser.add_argument('--crop_height', type=int, default=512, help="crop height")
+parser.add_argument('--crop_width', type=int, default=256, help="crop width")
+parser.add_argument('--test_crop_height', type=int, default=960, help="crop height")
+parser.add_argument('--test_crop_width', type=int, default=512, help="crop width")
 
-parser.add_argument('--using_apex', action='store_true', help='using apex, need to install apex')
-parser.add_argument('--sync_bn', action='store_true',help='enabling apex sync BN.')
 parser.add_argument('--opt-level', type=str, default="O0")
 parser.add_argument('--keep-batchnorm-fp32', type=str, default=None)
 parser.add_argument('--loss-scale', type=str, default=None)
@@ -78,18 +76,6 @@ parser.add_argument('--loss-scale', type=str, default=None)
 # parse arguments
 args = parser.parse_args()
 os.makedirs(args.logdir, exist_ok=True)
-
-#using sync_bn by using nvidia-apex, need to install apex.
-if args.sync_bn:
-    assert args.using_apex, "must set using apex and install nvidia-apex"
-if args.using_apex:
-    try:
-        from apex.parallel import DistributedDataParallel as DDP
-        from apex.fp16_utils import *
-        from apex import amp, optimizers
-        from apex.multi_tensor_apply import multi_tensor_applier
-    except ImportError:
-        raise ImportError("Please install apex from https://www.github.com/nvidia/apex to run this example.")
 
 #dis
 num_gpus = int(os.environ["WORLD_SIZE"]) if "WORLD_SIZE" in os.environ else 1
@@ -123,10 +109,6 @@ model = __models__[args.model](
                             using_ns=args.using_ns,
                             ns_size=args.ns_size
                            )
-if args.sync_bn:
-    import apex
-    print("using apex synced BN")
-    model = apex.parallel.convert_syncbn_model(model)
 
 model_loss = __loss__[args.model]
 model.cuda()
@@ -154,14 +136,6 @@ elif args.loadckpt:
     state_dict = torch.load(args.loadckpt, map_location=torch.device("cpu"))
     model.load_state_dict(state_dict['model'])
 print("start at epoch {}".format(start_epoch))
-
-if args.using_apex:
-    # Initialize Amp
-    model, optimizer = amp.initialize(model, optimizer,
-                                      opt_level=args.opt_level,
-                                      keep_batchnorm_fp32=args.keep_batchnorm_fp32,
-                                      loss_scale=args.loss_scale
-                                      )
 
 #conver model to dist
 if is_distributed:
@@ -295,29 +269,25 @@ def train_sample(sample, compute_metrics=False):
 
     optimizer.zero_grad()
 
-    outputs = model(imgL, imgR)
+    outputs = model(imgL, imgR) # outputs ['stage1', 'pred0', 'pred1', 'pred2', 'pred3', 'pred', 'stage2']; outputs ['stage1']:['pred0', 'pred1', 'pred2', 'pred3', 'pred',]
     mask = (disp_gt < args.maxdisp) & (disp_gt > 0)
     loss = model_loss(outputs, disp_gt, mask, dlossw=[float(e) for e in args.dlossw.split(",") if e])
 
-    outputs_stage = outputs["stage{}".format(num_stage)]
+    outputs_stage = outputs["stage{}".format(num_stage)] 
     disp_ests = [outputs_stage["pred1"], outputs_stage["pred2"], outputs_stage["pred3"]]
 
     scalar_outputs = {"loss": loss}
     image_outputs = {"disp_est": disp_ests, "disp_gt": disp_gt, "imgL": imgL, "imgR": imgR}
     if compute_metrics:
         with torch.no_grad():
-            image_outputs["errormap"] = [disp_error_image_func()(disp_est, disp_gt) for disp_est in disp_ests]
+            image_outputs["errormap"] = [disp_error_image_func.apply(disp_est, disp_gt) for disp_est in disp_ests]
             scalar_outputs["EPE"] = [EPE_metric(disp_est, disp_gt, mask) for disp_est in disp_ests]
             scalar_outputs["D1"] = [D1_metric(disp_est, disp_gt, mask) for disp_est in disp_ests]
             scalar_outputs["Thres1"] = [Thres_metric(disp_est, disp_gt, mask, 1.0) for disp_est in disp_ests]
             scalar_outputs["Thres2"] = [Thres_metric(disp_est, disp_gt, mask, 2.0) for disp_est in disp_ests]
             scalar_outputs["Thres3"] = [Thres_metric(disp_est, disp_gt, mask, 3.0) for disp_est in disp_ests]
 
-    if is_distributed and args.using_apex:
-        with amp.scale_loss(loss, optimizer) as scaled_loss:
-            scaled_loss.backward()
-    else:
-        loss.backward()
+    loss.backward()
     optimizer.step()
 
     if is_distributed:
