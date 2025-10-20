@@ -123,12 +123,12 @@ def get_cur_disp_range_samples(cur_disp, ndisp, disp_inteval_pixel, shape, ns_si
         cur_disp_min = (disp_min_ns - disp_range_comp).clamp(min=0, max=max_disp) #基本上没变化
         cur_disp_max = (disp_max_ns + disp_range_comp).clamp(min=0, max=max_disp)
 
-        new_interval = (cur_disp_max - cur_disp_min) / (ndisp//4 - 1) # 新的视差间隔，最大9最小1.2。这一段的处理主要就是找到
+        new_interval = (cur_disp_max - cur_disp_min) / (ndisp//4 - 1) # 新的视差间隔，最大9最小1.2，这个结果是像素级的
 
         # (B, 1/4D, 1/4H, 1/4W)
         disp_range_samples = cur_disp_min.unsqueeze(1) + (torch.arange(0, ndisp//4, device=cur_disp.device,
                                                                       dtype=cur_disp.dtype,requires_grad=False).reshape(1,-1,1,1) * new_interval.unsqueeze(1))
-        # 按视差间隔和视差级数量生成的数列 [1,6,128,64]
+        # 按视差间隔和视差级数量分割本阶段考虑的视差范围，生成的数列 [1,6,128,64]，这个结果是像素级的
         disp_range_samples = F.interpolate((disp_range_samples * 4.0).unsqueeze(1),
                                           [ndisp, H, W], mode='trilinear', align_corners=Align_Corners_Range).squeeze(1) # 上采样到(B, D, H, W) [1,24,512,256]
     return disp_range_samples
