@@ -10,7 +10,7 @@ from models import __models__, __loss__
 from utils import *
 
 
-def time(Net,imgL,imgR,device,**kwargs):
+def evaluate_time(Net,imgL,imgR,device,**kwargs):
     import time
 
     Net = Net.to(device)
@@ -153,7 +153,7 @@ if __name__ == '__main__':
     
     imgL = torch.randn([1,3,512,256])
     imgR = torch.randn([1,3,512,256])
-    avg_run_time = time(args=args,Net=Net,imgL=imgL,imgR=imgR,device=args.device)
+    avg_run_time = evaluate_time(args=args,Net=Net,imgL=imgL,imgR=imgR,device=args.device)
     total_flops,total_params = flops(Net,args.device)
 
     print(avg_run_time)
