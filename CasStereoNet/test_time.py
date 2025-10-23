@@ -14,6 +14,8 @@ def time(Net,imgL,imgR,device,**kwargs):
     import time
 
     Net = Net.to(device)
+    imgL = imgL.to(device)
+    imgR = imgR.to(device)
 
     for i in range(10):
         preds = Net(imgL, imgR)
