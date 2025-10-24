@@ -29,26 +29,6 @@ def evaluate_time(Net,imgL,imgR,device,**kwargs):
     avg_run_time = (end - start) / times
 
     return avg_run_time
-    
-
-def step_time(args,Net,train_loader,val_loader,**kwargs):
-    assert args.batch_size == 1
-
-    Net = Net.to(args.device)
-
-    for batch_idx, (imgL, imgR, disp_true) in enumerate(train_loader):
-        imgL, imgR = imgL.to(args.device), imgR.to(args.device)
-        break
-
-    for i in range(10):
-        preds = Net(imgL, imgR)
-
-    Net.t.reset()
-
-    for i in range(30):
-        preds = Net(imgL, imgR)
-
-    print(Net.t.all_avg_time_str(30))
 
 def flops(Net,device):
     Net = Net.to(device)
