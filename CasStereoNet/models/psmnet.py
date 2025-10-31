@@ -399,7 +399,8 @@ class PSMNet(nn.Module):
                                disp_range_samples=F.interpolate((disp_range_samples / stage_scale).unsqueeze(1),
                                                                 [self.ndisps[stage_idx]//int(stage_scale), left.size()[2]//int(stage_scale), left.size()[3]//int(stage_scale)],
                                                                 mode='trilinear',align_corners=Align_Corners_Range).squeeze(1),ndisp=self.ndisps[stage_idx]//int(stage_scale))
-                                #disp_range_samples 是把 disp_range_samples 降采样到 [1,12,128,64]，也就是按照stage_scale 对数值和size都缩小。第二次是[1,24,512,256]
+                                #disp_range_samples 是把 disp_range_samples 降采样到 [1,12,128,64]，也就是按照stage_scale 对数值和size都缩小。第二次是[1,12,256,128]
+                                # cost 第一次是[1,64,12,128,64] 第二次是[1,32,12,128,64]
             if self.training:
                 pred0, pred1, pred2, pred3 = self.cost_agg[stage_idx](cost,
                                                                       FineD=self.ndisps[stage_idx],
