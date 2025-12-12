@@ -9,40 +9,23 @@ from datasets import __datasets__
 from models import __models__, __loss__
 from utils import *
 
-@torch.no_grad()
-def evaluate_time(Net,imgL,imgR,device,**kwargs):
-    import time
+def test_inference_memory(model, imgL, imgR, device="cuda"):
+    model = model.to(device)
+    model.eval()
 
-    Net = Net.to(device)
-    imgL = imgL.to(device)
-    imgR = imgR.to(device)
+    torch.cuda.reset_peak_memory_stats(device)
+    torch.cuda.empty_cache()
 
-    for i in range(10):
-        preds = Net(imgL, imgR)
+    with torch.no_grad():
+        _ = model(imgL.to(device),imgR.to(device))
 
-    times = 30
-    start = time.perf_counter()
-    for i in range(times):
-        preds = Net(imgL, imgR)
-    end = time.perf_counter()
+    max_mem = torch.cuda.max_memory_allocated(device) / 1024 / 1024
+    reserved = torch.cuda.max_memory_reserved(device) / 1024 / 1024
 
-    avg_run_time = (end - start) / times
+    print(f"Max Allocated: {max_mem:.2f} MB")
+    print(f"Max Reserved (including cache): {reserved:.2f} MB")
 
-    return avg_run_time
-
-@torch.no_grad()
-def evaluate_flops(Net,input,device,**kwargs):
-    Net = Net.to(device)
-    # input = input.to(device)
-
-    from fvcore.nn import FlopCountAnalysis
-    flops = FlopCountAnalysis(Net,input)   # FLOPs（乘加=2）
-    total_flops = flops.total()
-
-    total_params = sum(p.numel() for p in Net.parameters())
-    # print(f"\nFLOPs: {total_flops/1e9:.2f} GFLOPs, parameters: {total_params / 1e6:.2f} M")
-
-    return total_flops,total_params
+    return max_mem, reserved
     
 if __name__ == '__main__':
 
@@ -118,8 +101,4 @@ if __name__ == '__main__':
     imgL = torch.randn(1,3,544,960).to(args.device)
     imgR = torch.randn(1,3,544,960).to(args.device)
 
-    avg_run_time = evaluate_time(Net=Net,imgL=imgL,imgR=imgR,device=args.device)
-    total_flops,total_params = evaluate_flops(Net,input=(imgL,imgL),device=args.device)
-
-    print(avg_run_time)
-    print(f"\nFLOPs: {total_flops/1e9:.2f} GFLOPs, parameters: {total_params / 1e6:.2f} M")
+    test_inference_memory(Net,imgL,imgR,args.device)
