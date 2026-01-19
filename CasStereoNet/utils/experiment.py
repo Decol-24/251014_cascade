@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.parallel
 import torch.utils.data
 from torch.autograd import Variable
-import torchvision.utils as vutils
+# import torchvision.utils as vutils
 import torch.nn.functional as F
 import numpy as np
 import copy
@@ -75,23 +75,23 @@ def save_scalars(logger, mode_tag, scalar_dict, global_step):
             scalar_name = scalar_name + "_" + str(idx)
             logger.add_scalar(scalar_name, value, global_step)
 
+# 因为jetson不支持，暂时放弃此功能
+# def save_images(logger, mode_tag, images_dict, global_step):
+#     images_dict = tensor2numpy(images_dict)
+#     for tag, values in images_dict.items():
+#         if not isinstance(values, list) and not isinstance(values, tuple):
+#             values = [values]
+#         for idx, value in enumerate(values):
+#             if len(value.shape) == 3:
+#                 value = value[:, np.newaxis, :, :]
+#             value = value[:1]
+#             value = torch.from_numpy(value)
 
-def save_images(logger, mode_tag, images_dict, global_step):
-    images_dict = tensor2numpy(images_dict)
-    for tag, values in images_dict.items():
-        if not isinstance(values, list) and not isinstance(values, tuple):
-            values = [values]
-        for idx, value in enumerate(values):
-            if len(value.shape) == 3:
-                value = value[:, np.newaxis, :, :]
-            value = value[:1]
-            value = torch.from_numpy(value)
-
-            image_name = '{}/{}'.format(mode_tag, tag)
-            if len(values) > 1:
-                image_name = image_name + "_" + str(idx)
-            logger.add_image(image_name, vutils.make_grid(value, padding=0, nrow=1, normalize=True, scale_each=True),
-                             global_step)
+#             image_name = '{}/{}'.format(mode_tag, tag)
+#             if len(values) > 1:
+#                 image_name = image_name + "_" + str(idx)
+#             logger.add_image(image_name, vutils.make_grid(value, padding=0, nrow=1, normalize=True, scale_each=True),
+#                              global_step)
 
 
 def adjust_learning_rate(optimizer, epoch, base_lr, lrepochs):

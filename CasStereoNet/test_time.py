@@ -5,30 +5,35 @@ import argparse
 import torch
 import torch.backends.cudnn as cudnn
 import time
-from datasets import __datasets__
 from models import __models__, __loss__
 from utils import *
 
 @torch.no_grad()
-def evaluate_time(Net,imgL,imgR,device,**kwargs):
-    import time
-
-    Net = Net.to(device)
+def evaluate_time(Net, imgL, imgR, device, warmup=30, times=50):
+    Net = Net.to(device).eval()
     imgL = imgL.to(device)
     imgR = imgR.to(device)
 
-    for i in range(10):
-        preds = Net(imgL, imgR)
+    # warmup
+    for _ in range(warmup):
+        with torch.amp.autocast('cuda', enabled=True):
+            _ = Net(imgL, imgR)
+    torch.cuda.synchronize()
 
-    times = 30
-    start = time.perf_counter()
-    for i in range(times):
-        preds = Net(imgL, imgR)
-    end = time.perf_counter()
+    starter = torch.cuda.Event(enable_timing=True)
+    ender   = torch.cuda.Event(enable_timing=True)
 
-    avg_run_time = (end - start) / times
+    total_ms = 0.0
+    for _ in range(times):
+        starter.record()
+        with torch.amp.autocast('cuda', enabled=True):
+            _ = Net(imgL, imgR)
+        ender.record()
+        torch.cuda.synchronize()
+        total_ms += starter.elapsed_time(ender)
 
-    return avg_run_time
+    avg_s = (total_ms / times) / 1000.0
+    return avg_s
 
 @torch.no_grad()
 def evaluate_flops(Net,input,device,**kwargs):
@@ -52,13 +57,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Cascade Stereo Network (CasStereoNet)')
     parser.add_argument('--model', default='gwcnet-c', help='select a model structure', choices=__models__.keys()) # gwcnet-c 是 PSMnet
     parser.add_argument('--maxdisp', type=int, default=192, help='maximum disparity')
-
-    parser.add_argument('--dataset', default='sceneflow', help='dataset name', choices=__datasets__.keys())
-    parser.add_argument('--datapath', default='/home/liqi/Code/Scene_Flow_Datasets/', help='data path')
-    parser.add_argument('--test_dataset', default='sceneflow', help='dataset name', choices=__datasets__.keys())
-    parser.add_argument('--test_datapath', default='/home/liqi/Code/Scene_Flow_Datasets/', help='data path')
-    parser.add_argument('--trainlist', default='./filenames/sceneflow_train.txt', help='training list')
-    parser.add_argument('--testlist', default='./filenames/sceneflow_test.txt', help='testing list')
 
     parser.add_argument('--lr', type=float, default=0.001, help='base learning rate')
     parser.add_argument('--batch_size', type=int, default=1, help='training batch size')
@@ -85,18 +83,8 @@ if __name__ == '__main__':
     parser.add_argument('--cr_base_chs', type=str, default="32,32,16", help='cost regularization base channels')
     parser.add_argument('--grad_method', type=str, default="detach", choices=["detach", "undetach"], help='predicted disp detach, undetach')
 
-
     parser.add_argument('--using_ns', default=True, help='using neighbor search')
     parser.add_argument('--ns_size', type=int, default=3, help='nb_size')
-
-    parser.add_argument('--crop_height', type=int, default=512, help="crop height")
-    parser.add_argument('--crop_width', type=int, default=256, help="crop width")
-    parser.add_argument('--test_crop_height', type=int, default=960, help="crop height")
-    parser.add_argument('--test_crop_width', type=int, default=512, help="crop width")
-
-    parser.add_argument('--opt-level', type=str, default="O0")
-    parser.add_argument('--keep-batchnorm-fp32', type=str, default=None)
-    parser.add_argument('--loss-scale', type=str, default=None)
 
     parser.add_argument('--device', default='cuda', type=str)
 
