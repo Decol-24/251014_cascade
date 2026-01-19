@@ -37,7 +37,7 @@ def evaluate_time(Net, imgL, imgR, device, warmup=30, times=50):
 
 @torch.no_grad()
 def evaluate_flops(Net,input,device,**kwargs):
-    Net = Net.to(device)
+    Net = Net.to(device).eval()
     # input = input.to(device)
 
     from fvcore.nn import FlopCountAnalysis
@@ -106,8 +106,8 @@ if __name__ == '__main__':
     imgL = torch.randn(1,3,544,960).to(args.device)
     imgR = torch.randn(1,3,544,960).to(args.device)
 
-    avg_run_time = evaluate_time(Net=Net,imgL=imgL,imgR=imgR,device=args.device)
+    # avg_run_time = evaluate_time(Net=Net,imgL=imgL,imgR=imgR,device=args.device)
     total_flops,total_params = evaluate_flops(Net,input=(imgL,imgL),device=args.device)
 
-    print(avg_run_time)
+    # print(avg_run_time)
     print(f"\nFLOPs: {total_flops/1e9:.2f} GFLOPs, parameters: {total_params / 1e6:.2f} M")
