@@ -59,6 +59,28 @@ def evaluate_flops(Net,input,device,**kwargs):
     # print(f"\nFLOPs: {total_flops/1e9:.2f} GFLOPs, parameters: {total_params / 1e6:.2f} M")
 
     return total_flops,total_params
+
+@torch.no_grad()
+def max_memory(Net,imgL,imgR,device,**kwargs):
+    Net = Net.to(device)
+
+    torch.cuda.empty_cache()
+    torch.cuda.reset_peak_memory_stats()
+
+    # 预热
+    for _ in range(30):
+        with torch.amp.autocast('cuda',enabled=True):
+            Net(imgL, imgR)
+
+    torch.cuda.synchronize()
+    torch.cuda.reset_peak_memory_stats()
+
+    for _ in range(50):
+        with torch.amp.autocast('cuda',enabled=True):
+            Net(imgL, imgR)
+
+    torch.cuda.synchronize()
+    print(torch.cuda.max_memory_allocated()/1024**2)
     
 if __name__ == '__main__':
 
@@ -69,30 +91,12 @@ if __name__ == '__main__':
     parser.add_argument('--model', default='gwcnet-c', help='select a model structure', choices=__models__.keys()) # gwcnet-c 是 PSMnet
     parser.add_argument('--maxdisp', type=int, default=192, help='maximum disparity')
 
-    parser.add_argument('--lr', type=float, default=0.001, help='base learning rate')
-    parser.add_argument('--batch_size', type=int, default=1, help='training batch size')
-    parser.add_argument('--test_batch_size', type=int, default=1, help='testing batch size')
-    parser.add_argument('--epochs', type=int, default=16, help='number of epochs to train')
-    parser.add_argument('--lrepochs', type=str, default='10,12,14,16:2', help='the epochs to decay lr: the downscale rate')
-
-    parser.add_argument('--logdir', default='./result', help='the directory to save logs and checkpoints')
-    parser.add_argument('--loadckpt', help='load the weights from a specific checkpoint')
-    parser.add_argument('--resume', action='store_true', help='continue training the model')
-    parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
-
-    parser.add_argument('--summary_freq', type=int, default=50, help='the frequency of saving summary')
-    parser.add_argument('--save_freq', type=int, default=1, help='the frequency of saving checkpoint')
-
-    parser.add_argument('--log_freq', type=int, default=50, help='log freq')
-    parser.add_argument('--eval_freq', type=int, default=1, help='eval freq')
-    parser.add_argument("--local_rank", type=int, default=0)
-    parser.add_argument('--mode', type=str, default="train", help='train or test mode')
-
     parser.add_argument('--ndisps', type=str, default="48,24", help='ndisps')
     parser.add_argument('--disp_inter_r', type=str, default="4,1", help='disp_intervals_ratio')
     parser.add_argument('--dlossw', type=str, default="0.5,2.0", help='depth loss weight for different stage')
     parser.add_argument('--cr_base_chs', type=str, default="32,32,16", help='cost regularization base channels')
     parser.add_argument('--grad_method', type=str, default="detach", choices=["detach", "undetach"], help='predicted disp detach, undetach')
+
 
     parser.add_argument('--using_ns', default=True, help='using neighbor search')
     parser.add_argument('--ns_size', type=int, default=3, help='nb_size')
@@ -115,11 +119,13 @@ if __name__ == '__main__':
                             )
     
     Net = Net.to(args.device)
-    imgL = torch.randn(1,3,544,960).to(args.device)
-    imgR = torch.randn(1,3,544,960).to(args.device)
+    th,tw = 544,960
+    imgL = torch.randn(1,3,th,tw).to(args.device)
+    imgR = torch.randn(1,3,th,tw).to(args.device)
 
-    avg_run_time = evaluate_time(Net=Net,imgL=imgL,imgR=imgR,device=args.device,amp=amp)
-    total_flops,total_params = evaluate_flops(Net,input=(imgL,imgL),device=args.device)
+    # avg_run_time = evaluate_time(Net=Net,imgL=imgL,imgR=imgR,device=args.device,amp=amp)
+    # total_flops,total_params = evaluate_flops(Net,input=(imgL,imgL),device=args.device)
 
-    # print(avg_run_time)
-    print(f"\nFLOPs: {total_flops/1e9:.2f} GFLOPs, parameters: {total_params / 1e6:.2f} M")
+    # # print(avg_run_time)
+    # print(f"\nFLOPs: {total_flops/1e9:.2f} GFLOPs, parameters: {total_params / 1e6:.2f} M")
+    max_memory(Net=Net,imgL=imgL,imgR=imgR,device=args.device)
