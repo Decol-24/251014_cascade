@@ -62,7 +62,7 @@ def evaluate_flops(Net,input,device,**kwargs):
 
 @torch.no_grad()
 def max_memory(Net,imgL,imgR,device,**kwargs):
-    Net = Net.to(device)
+    Net = Net.to(device).eval()
 
     torch.cuda.empty_cache()
     torch.cuda.reset_peak_memory_stats()
@@ -118,7 +118,7 @@ if __name__ == '__main__':
                                 ns_size=args.ns_size
                             )
     
-    Net = Net.to(args.device)
+    Net = Net.to(args.device).eval()
     th,tw = 544,960
     imgL = torch.randn(1,3,th,tw).to(args.device)
     imgR = torch.randn(1,3,th,tw).to(args.device)
