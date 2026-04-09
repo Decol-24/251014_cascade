@@ -119,13 +119,14 @@ if __name__ == '__main__':
                             )
     
     Net = Net.to(args.device).eval()
-    th,tw = 544,960
+    th,tw = 544,960 #544,960   384,1248
     imgL = torch.randn(1,3,th,tw).to(args.device)
     imgR = torch.randn(1,3,th,tw).to(args.device)
 
-    # avg_run_time = evaluate_time(Net=Net,imgL=imgL,imgR=imgR,device=args.device,amp=amp)
-    # total_flops,total_params = evaluate_flops(Net,input=(imgL,imgL),device=args.device)
+    avg_run_time = evaluate_time(Net=Net,imgL=imgL,imgR=imgR,device=args.device,amp=amp)
+    print(avg_run_time)
 
-    # # print(avg_run_time)
+    # total_flops,total_params = evaluate_flops(Net,input=(imgL,imgL),device=args.device)
     # print(f"\nFLOPs: {total_flops/1e9:.2f} GFLOPs, parameters: {total_params / 1e6:.2f} M")
-    max_memory(Net=Net,imgL=imgL,imgR=imgR,device=args.device)
+
+    # max_memory(Net=Net,imgL=imgL,imgR=imgR,device=args.device)
