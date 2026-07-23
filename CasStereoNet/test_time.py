@@ -1,8 +1,6 @@
 from __future__ import print_function, division
 import torch
 import argparse
-import argparse
-import torch
 import torch.backends.cudnn as cudnn
 from models import __models__, __loss__
 from utils import *
@@ -88,7 +86,7 @@ if __name__ == '__main__':
     assert torch.backends.cudnn.enabled, "Amp requires cudnn backend to be enabled."
 
     parser = argparse.ArgumentParser(description='Cascade Stereo Network (CasStereoNet)')
-    parser.add_argument('--model', default='gwcnet-c', help='select a model structure', choices=__models__.keys()) # gwcnet-c 是 PSMnet
+    parser.add_argument('--model', default='gwcnet-c', help='select a model structure', choices=__models__.keys()) # gwcnet-c 是 PSMnet   gwcnet 是 GwcNet
     parser.add_argument('--maxdisp', type=int, default=192, help='maximum disparity')
 
     parser.add_argument('--ndisps', type=str, default="48,24", help='ndisps')
