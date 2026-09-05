@@ -79,6 +79,70 @@ def max_memory(Net,imgL,imgR,device,**kwargs):
 
     torch.cuda.synchronize()
     print(torch.cuda.max_memory_allocated()/1024**2)
+
+@torch.no_grad()
+def evaluate_time_2(Net, imgL, imgR, device, warmup=30, times=50, amp=False):
+    import time
+    from datetime import datetime
+
+    Net = Net.to(device).eval()
+    imgL = imgL.to(device)
+    imgR = imgR.to(device)
+
+    # warmup
+    for _ in range(warmup):
+        with torch.amp.autocast('cuda', enabled=True):
+            _ = Net(imgL, imgR)
+
+    torch.cuda.synchronize()
+
+    # measurement start marker
+    start_timestamp = time.time()
+    start_time_str = datetime.fromtimestamp(start_timestamp).strftime(
+        "%Y-%m-%d %H:%M:%S.%f"
+    )
+
+    with open("_marker.log", "a") as f:
+        f.write(
+            f"START {start_timestamp:.6f} "
+            f"{start_time_str} "
+            f"warmup={warmup} times={times}\n"
+        )
+
+    starter = torch.cuda.Event(enable_timing=True)
+    ender = torch.cuda.Event(enable_timing=True)
+
+    total_ms = 0.0
+
+    for _ in range(times):
+        starter.record()
+
+        with torch.amp.autocast('cuda', enabled=True):
+            _ = Net(imgL, imgR)
+
+        ender.record()
+        torch.cuda.synchronize()
+
+        total_ms += starter.elapsed_time(ender)
+
+    torch.cuda.synchronize()
+
+    # measurement end marker
+    end_timestamp = time.time()
+    end_time_str = datetime.fromtimestamp(end_timestamp).strftime(
+        "%Y-%m-%d %H:%M:%S.%f"
+    )
+
+    with open("_marker.log", "a") as f:
+        f.write(
+            f"END   {end_timestamp:.6f} "
+            f"{end_time_str} "
+            f"warmup={warmup} times={times}\n"
+        )
+
+    avg_s = (total_ms / times) / 1000.0
+
+    return avg_s
     
 if __name__ == '__main__':
 
@@ -117,12 +181,15 @@ if __name__ == '__main__':
                             )
     
     Net = Net.to(args.device).eval()
-    th,tw = 544,960 #544,960   384,1248
+    th,tw = 384,1248  #544,960   384,1248
     imgL = torch.randn(1,3,th,tw).to(args.device)
     imgR = torch.randn(1,3,th,tw).to(args.device)
 
-    avg_run_time = evaluate_time(Net=Net,imgL=imgL,imgR=imgR,device=args.device,amp=amp)
+    avg_run_time = evaluate_time_2(Net=Net,imgL=imgL,imgR=imgR,device=args.device,amp=amp)
     print(avg_run_time)
+
+    # avg_run_time = evaluate_time(Net=Net,imgL=imgL,imgR=imgR,device=args.device,amp=amp)
+    # print(avg_run_time)
 
     # total_flops,total_params = evaluate_flops(Net,input=(imgL,imgL),device=args.device)
     # print(f"\nFLOPs: {total_flops/1e9:.2f} GFLOPs, parameters: {total_params / 1e6:.2f} M")
